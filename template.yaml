@@ -29,6 +29,25 @@ Resources:
             Path: /hello
             Method: get
 
+  PaperHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: papers_handler/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          # Replace this with the name of your S3 bucket where exam PDFs should be stored.
+          BUCKET_NAME: examfleet-papers-bucket
+      Events:
+        PaperApi:
+          Type: Api
+          Properties:
+            Path: /papers
+            Method: post
+
   ApplicationResourceGroup:
     Type: AWS::ResourceGroups::Group
     Properties:

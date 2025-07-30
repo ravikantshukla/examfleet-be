@@ -25,23 +25,33 @@ def _dummy_flashcards(summary: str) -> List[Dict[str, str]]:
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Generate flashcards from a summary of study material.
+
+    Expects a JSON payload with a ``summary`` field and optionally a
+    ``topicId``.  Returns a list of objects matching the ``Flashcard``
+    interface used by the front‑end (id, front, back, topicId).  When the
+    OpenAI API is unavailable a default set of flashcards is used.
+    """
+    # Decode body
+    body = event.get("body") or "{}"
+    if event.get("isBase64Encoded"):
+        import base64
+        body = base64.b64decode(body).decode()
     try:
-        body = event.get("body") or "{}"
-        if event.get("isBase64Encoded"):
-            import base64
-            body = base64.b64decode(body).decode()
         payload = json.loads(body)
-        summary = payload["summary"]
+        summary: str = payload["summary"]
+        topic_id: str = payload.get("topicId", "general")
     except (KeyError, json.JSONDecodeError) as exc:
         return {"statusCode": 400, "body": json.dumps({"error": f"Invalid input: {exc}"})}
 
     api_key = os.environ.get("OPENAI_API_KEY")
+    cards: List[Dict[str, str]]
     if openai and api_key:
         openai.api_key = api_key
         prompt = (
             "Generate three flashcards from the following summary. "
-            "Return a JSON list where each element has 'question' and 'answer' fields.\n\n"
-            f"Summary:\n{summary}\n"
+            "Return the result as JSON: a list where each element has 'front' and 'back' fields, representing the question and answer.\n\nSummary:\n"
+            + summary
         )
         try:
             response = openai.ChatCompletion.create(
@@ -51,10 +61,28 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 max_tokens=500,
             )
             content = response["choices"][0]["message"]["content"].strip()
-            flashcards = json.loads(content)
+            cards = json.loads(content)
         except Exception:
-            flashcards = _dummy_flashcards(summary)
+            cards = _dummy_flashcards(summary)
     else:
-        flashcards = _dummy_flashcards(summary)
+        cards = _dummy_flashcards(summary)
 
-    return {"statusCode": 200, "body": json.dumps({"flashcards": flashcards})}
+    # Convert to full Flashcard objects: add id and topicId, rename keys
+    import uuid
+
+    flashcards: List[Dict[str, str]] = []
+    for card in cards:
+        # card may have 'question'/'answer' (dummy) or 'front'/'back'
+        front = card.get("front") or card.get("question") or ""
+        back = card.get("back") or card.get("answer") or ""
+        flashcards.append({
+            "id": str(uuid.uuid4()),
+            "front": front,
+            "back": back,
+            "topicId": topic_id,
+        })
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps({"flashcards": flashcards}),
+    }

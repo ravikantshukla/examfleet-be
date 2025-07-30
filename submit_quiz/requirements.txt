@@ -1,0 +1,1 @@
+# This lambda uses only boto3 which is available in the AWS runtime.

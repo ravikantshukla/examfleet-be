@@ -1,0 +1,1 @@
+# No additional third‑party dependencies are required for the upload handler.

@@ -48,6 +48,218 @@ Resources:
             Path: /papers
             Method: post
 
+  ####### ExamFleet backend functions #######
+
+  # S3 buckets for uploads and extracted text.  These names can be changed
+  # and will be referenced in environment variables below.
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: examfleet-uploads-bucket
+
+  ExtractedBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: examfleet-extracted-bucket
+
+  UploadHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: upload_handler/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          UPLOADS_BUCKET_NAME: !Ref UploadsBucket
+      Events:
+        UploadApi:
+          Type: Api
+          Properties:
+            Path: /upload
+            Method: post
+
+  ExtractTextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: extract_text/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          UPLOADS_BUCKET_NAME: !Ref UploadsBucket
+          EXTRACTED_BUCKET_NAME: !Ref ExtractedBucket
+      Events:
+        ExtractTextBucket:
+          Type: S3
+          Properties:
+            Bucket: !Ref UploadsBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .pdf
+
+  SummarizeContentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: summarize_content/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          OPENAI_API_KEY: ''  # set your API key in the Lambda configuration
+      Events:
+        SummarizeApi:
+          Type: Api
+          Properties:
+            Path: /summarize
+            Method: post
+
+  GenerateQuizFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: generate_quiz/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          OPENAI_API_KEY: ''
+      Events:
+        GenerateQuizApi:
+          Type: Api
+          Properties:
+            Path: /generate-quiz
+            Method: post
+
+  SubmitQuizFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: submit_quiz/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          QUIZ_RESULTS_TABLE: ExamFleetQuizResults
+      Events:
+        SubmitQuizApi:
+          Type: Api
+          Properties:
+            Path: /submit-quiz
+            Method: post
+
+  GetPerformanceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_performance/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          QUIZ_RESULTS_TABLE: ExamFleetQuizResults
+      Events:
+        GetPerformanceApi:
+          Type: Api
+          Properties:
+            Path: /performance
+            Method: post
+
+  FlashcardGeneratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: flashcard_generator/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          OPENAI_API_KEY: ''
+      Events:
+        FlashcardApi:
+          Type: Api
+          Properties:
+            Path: /flashcards
+            Method: post
+
+  SaveXpBadgeProgressFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: save_xp_badge_progress/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          PROGRESS_TABLE: ExamFleetUserProgress
+      Events:
+        SaveXpApi:
+          Type: Api
+          Properties:
+            Path: /progress
+            Method: post
+
+  JwtVerifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: jwt_verify/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          FIREBASE_PROJECT_ID: ''
+          GOOGLE_APPLICATION_CREDENTIALS: ''
+      Events:
+        JwtVerifyApi:
+          Type: Api
+          Properties:
+            Path: /auth/verify
+            Method: post
+
+  # DynamoDB tables for quiz results and user progress
+  ExamFleetQuizResults:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: examfleet-quiz-results
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: quizId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: quizId
+          KeyType: RANGE
+
+  ExamFleetUserProgress:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: examfleet-user-progress
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+
   ApplicationResourceGroup:
     Type: AWS::ResourceGroups::Group
     Properties:
